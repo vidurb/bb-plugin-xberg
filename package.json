@@ -1,0 +1,48 @@
+{
+  "name": "bb-plugin-xberg",
+  "version": "0.1.0",
+  "description": "Extract text from PDFs, Office files and images in BB threads with Xberg.",
+  "type": "module",
+  "license": "MIT",
+  "author": "vidurb",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vidurb/bb-plugin-xberg.git"
+  },
+  "engines": {
+    "bb": ">=0.48",
+    "bbPluginSdk": ">=0.6.104"
+  },
+  "bb": {
+    "name": "Xberg",
+    "description": "Lets agents read PDFs, Office files, images and other documents with Xberg, running on the machine that holds the thread's workspace.",
+    "branding": {
+      "icon": "FileText"
+    },
+    "server": "./server.ts",
+    "host": "./host.ts",
+    "skills": [
+      "skills"
+    ]
+  },
+  "scripts": {
+    "build": "bb plugin build .",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "0.6.104",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.0.0",
+    "better-sqlite3": "^12.0.0",
+    "cron-parser": "^5.5.0",
+    "hono": "^4.11.9",
+    "prettier": "^3.9.10",
+    "typescript": "^5.7.0"
+  }
+}
