@@ -18,6 +18,7 @@ const status = {
   supported: true,
   installed: true,
   binaryPath: "/data/xberg",
+  cacheBytes: 3 * 1024 * 1024,
 };
 
 async function setup(
@@ -25,6 +26,7 @@ async function setup(
   options: {
     environmentId?: string | null;
     storage?: string | null;
+    thread?: Record<string, unknown>;
   } = {},
 ) {
   const calls: Array<{
@@ -42,6 +44,9 @@ async function setup(
             options.environmentId === undefined
               ? "env_1"
               : options.environmentId,
+          parentThreadId: null,
+          sourceThreadId: null,
+          ...options.thread,
         }),
       },
       environments: {
@@ -82,7 +87,7 @@ test("the tool runs on the thread's machine, confined to workspace and storage",
   assert.equal(calls[0]!.hostId, "host_mac");
   assert.deepEqual(calls[0]!.input, {
     baseDir: "/work",
-    roots: ["/work", "/storage"],
+    roots: ["/work", "/storage/thread-test"],
     path: "report.pdf",
     format: "markdown",
     ocr: "default",
@@ -96,6 +101,19 @@ test("the tool runs on the thread's machine, confined to workspace and storage",
   assert.match(text(result), /Characters 0-5 of 5\./);
   assert.match(text(result), /\n\nhello$/);
   assert.doesNotMatch(text(result), /offset=/);
+});
+
+test("a thread can also read storage from the threads it came from", async () => {
+  const { harness, calls } = await setup(() => okResult, {
+    thread: { parentThreadId: "thr_parent", sourceThreadId: "thr_source" },
+  });
+  await extract(harness, { path: "report.pdf" });
+  assert.deepEqual(calls[0]!.input.roots, [
+    "/work",
+    "/storage/thread-test",
+    "/storage/thr_parent",
+    "/storage/thr_source",
+  ]);
 });
 
 test("a machine without thread storage confines to the workspace alone", async () => {
@@ -178,6 +196,24 @@ test("the CLI targets a named machine or the current thread's machine", async ()
   assert.equal(byThread.exitCode, 0);
   assert.equal(calls.at(-1)!.method, "install");
   assert.equal(calls.at(-1)!.hostId, "host_mac");
+});
+
+test("the CLI reports cache size and clears the cache", async () => {
+  const { harness, calls } = await setup(({ method }) =>
+    method === "clearCache" ? { removedBytes: 2 * 1024 * 1024 } : status,
+  );
+  const shown = await harness.behavior.runCli(["status", "--machine", "pod"]);
+  assert.match(String(shown.stdout), /3\.0 MB of cached text/);
+  const cleared = await harness.behavior.runCli([
+    "cache",
+    "clear",
+    "--machine",
+    "pod",
+  ]);
+  assert.equal(cleared.exitCode, 0);
+  assert.equal(String(cleared.stdout), "pod: removed 2.0 MB of cached text\n");
+  assert.equal(calls.at(-1)!.method, "clearCache");
+  assert.equal(calls.at(-1)!.hostId, "host_pod");
 });
 
 test("the CLI explains what to do when it can't pick a machine", async () => {

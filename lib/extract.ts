@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ExtractInput, ExtractOutput } from "../contract.ts";
+import { workDirFor } from "./cache.ts";
 
 export const MAX_FILE_BYTES = 256 * 1024 * 1024;
 export const MAX_STDOUT_BYTES = 64 * 1024 * 1024;
@@ -162,6 +163,9 @@ interface ParsedDocument {
   warnings: string[];
 }
 
+// Reported for every image without EXIF data, which says nothing about the text.
+const IGNORED_WARNING = /no exif data found/i;
+
 /** Reads `--format json` output: the document sits under `result` in 1.3.x. */
 export function parseOutput(stdout: string): ParsedDocument {
   let parsed: unknown;
@@ -180,7 +184,9 @@ export function parseOutput(stdout: string): ParsedDocument {
     throw new ExtractError("Xberg's output has no document content.");
   }
   const warnings = Array.isArray(document.processing_warnings)
-    ? document.processing_warnings.map((warning) => String(warning?.message))
+    ? document.processing_warnings
+        .map((warning) => String(warning?.message))
+        .filter((message) => !IGNORED_WARNING.test(message))
     : [];
   return {
     content: document.content,
@@ -244,7 +250,7 @@ export async function extractDocument(
   try {
     const file = await resolveDocument(input.baseDir, input.roots, input.path);
     const binary = await dependencies.ensureInstalled();
-    const workDir = join(dependencies.dataDir, "work");
+    const workDir = workDirFor(dependencies.dataDir);
     await mkdir(workDir, { recursive: true });
     const stdout = await runXberg({
       binary,

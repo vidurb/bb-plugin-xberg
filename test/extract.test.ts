@@ -169,6 +169,26 @@ test("parseOutput reads the nested envelope and a flat document", () => {
   assert.throws(() => parseOutput("null"), /no document content/);
 });
 
+test("parseOutput drops the EXIF noise and keeps other warnings", () => {
+  const { warnings } = parseOutput(
+    JSON.stringify({
+      content: "x",
+      processing_warnings: [
+        {
+          message:
+            "EXIF metadata extraction failed: failed to parse EXIF block: no exif data found in this file",
+        },
+        { message: "EXIF metadata extraction failed: corrupt block" },
+        { message: "low confidence" },
+      ],
+    }),
+  );
+  assert.deepEqual(warnings, [
+    "EXIF metadata extraction failed: corrupt block",
+    "low confidence",
+  ]);
+});
+
 test("slicePage pages through text and never splits a surrogate pair", () => {
   assert.deepEqual(slicePage("abcdef", 2, 2), { text: "cd", offset: 2 });
   assert.deepEqual(slicePage("abc", 99, 2), { text: "", offset: 3 });

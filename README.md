@@ -19,11 +19,12 @@ pinned Xberg release (about 100 MB), checks its SHA-256 against a digest in this
 plugin, and unpacks it to the plugin's data directory on that machine. It needs
 to reach `github.com`, and `tar` must be on the machine.
 
-To check or install ahead of time:
+To check or install ahead of time, or to delete cached text:
 
 ```sh
 bb xberg status --machine <name>
 bb xberg install --machine <name>
+bb xberg cache clear --machine <name>
 ```
 
 Supported machines: Apple Silicon macOS, and Linux on x86-64 or arm64. Linux uses
@@ -47,7 +48,8 @@ Longer documents are read a page at a time, and the result gives the next
 ## Limits and safety
 
 - **Paths:** the real file, after following symlinks, must be inside the thread's
-  workspace or the machine's thread storage root. URLs are refused.
+  workspace, its own thread storage, or the storage of the thread it was forked or
+  spawned from. Prompt attachments live in thread storage. URLs are refused.
 - **Config:** Xberg runs with `--no-config-discovery` in its own working
   directory, so an `xberg.toml` in a workspace has no effect.
 - **Environment:** Xberg gets only `PATH`, `HOME`, `TMPDIR` and locale variables,
@@ -56,8 +58,10 @@ Longer documents are read a page at a time, and the result gives the next
   10 minutes per extraction.
 - **Not a sandbox:** Xberg parses untrusted files as your user, and can make
   network requests, for example to fetch OCR models.
-- **Cache:** Xberg's cache keeps extracted text in plain form in the plugin's data
-  directory on each machine, with no limit set by this plugin.
+- **Cache:** Xberg keeps extracted text readable in the plugin's data directory on
+  each machine, so repeat reads are quick. Xberg limits the extraction cache to
+  30 days and 2 GB. Its OCR cache has no limit, so check the size with
+  `bb xberg status` and clear both with `bb xberg cache clear`.
 
 ## Development
 

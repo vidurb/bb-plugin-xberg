@@ -14,6 +14,7 @@ const statusSchema = z
     supported: z.boolean(),
     installed: z.boolean(),
     binaryPath: z.string().nullable(),
+    cacheBytes: z.number().int().min(0),
   })
   .strict();
 export type XbergStatus = z.infer<typeof statusSchema>;
@@ -59,6 +60,10 @@ export const hostContract = defineRpcContract({
   install: {
     input: z.object({}).strict(),
     output: statusSchema,
+  },
+  clearCache: {
+    input: z.object({}).strict(),
+    output: z.object({ removedBytes: z.number().int().min(0) }).strict(),
   },
   extract: {
     input: extractInputSchema,

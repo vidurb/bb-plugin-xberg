@@ -71,13 +71,18 @@ function renderResult(result: Extract<ExtractOutput, { ok: true }>): string {
   return `${lines.join("\n")}\n\n${result.content}`;
 }
 
+function formatMegabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function renderStatus(status: XbergStatus, machine: string): string {
   const state = !status.supported
     ? "unsupported platform"
     : status.installed
       ? `installed at ${status.binaryPath}`
       : "not installed yet (installs on first use)";
-  return `${machine}: Xberg ${status.version} on ${status.platform}: ${state}`;
+  const cache = `${formatMegabytes(status.cacheBytes)} of cached text`;
+  return `${machine}: Xberg ${status.version} on ${status.platform}: ${state}; ${cache}`;
 }
 
 export default function plugin(bb: BbPluginApi) {
@@ -90,7 +95,16 @@ export default function plugin(bb: BbPluginApi) {
       environmentId: thread.environmentId,
     });
     if (!environment.hostId || !environment.path) return null;
-    return { hostId: environment.hostId, workspace: environment.path };
+    return {
+      hostId: environment.hostId,
+      workspace: environment.path,
+      // A fork or child thread can read documents attached to its origin.
+      storageThreadIds: [
+        threadId,
+        thread.parentThreadId,
+        thread.sourceThreadId,
+      ].filter((id): id is string => Boolean(id)),
+    };
   }
 
   bb.agents.registerTool({
@@ -121,9 +135,12 @@ export default function plugin(bb: BbPluginApi) {
           "extract",
           {
             baseDir: location.workspace,
-            roots: storage
-              ? [location.workspace, storage]
-              : [location.workspace],
+            roots: [
+              location.workspace,
+              ...(storage
+                ? location.storageThreadIds.map((id) => `${storage}/${id}`)
+                : []),
+            ],
             path: params.path,
             format: params.format,
             ocr: params.ocr,
@@ -185,7 +202,7 @@ export default function plugin(bb: BbPluginApi) {
   bb.cli.register(
     defineCli({
       name: "xberg",
-      summary: "Check or install the Xberg CLI on a machine",
+      summary: "Check or install Xberg on a machine, or clear its cached text",
       commands: {
         status: cliCommand({
           summary: "Show whether Xberg is installed on a machine",
@@ -200,6 +217,22 @@ export default function plugin(bb: BbPluginApi) {
             return {
               exitCode: 0,
               stdout: `${renderStatus(status, target.name)}\n`,
+            };
+          },
+        }),
+        "cache clear": cliCommand({
+          summary: "Delete the text Xberg has cached on a machine",
+          options: { machine: machineOption },
+          async run(input, ctx) {
+            const target = await targetMachine(input.options.machine, ctx);
+            const { removedBytes } = await host.call(
+              "clearCache",
+              {},
+              { hostId: target.hostId, signal: ctx.signal },
+            );
+            return {
+              exitCode: 0,
+              stdout: `${target.name}: removed ${formatMegabytes(removedBytes)} of cached text\n`,
             };
           },
         }),
