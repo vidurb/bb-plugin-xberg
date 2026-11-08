@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-xberg",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Extract text from PDFs, Office files and images in BB threads with Xberg.",
   "type": "module",
   "license": "MIT",

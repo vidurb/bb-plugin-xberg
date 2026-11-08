@@ -16,9 +16,11 @@ the thread's workspace.
   anywhere else into the workspace first.
 - Local files only. For a document at a URL, download it first or use a web
   scraping tool.
-- Each call returns up to `max_chars` characters (default 50,000). The result
+- Each call returns up to `max_chars` characters (default 20,000). The result
   says how many there are in total and which `offset` to use next. Read further
   only if you need to. Repeat calls are served from Xberg's cache.
+- Raise `max_chars` sparingly: some agents, including Claude Code, reject a
+  tool result above about 25,000 tokens.
 - `format` is `markdown` (default) or `plain`.
 
 ## Scanned documents

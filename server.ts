@@ -17,7 +17,9 @@ import {
   type XbergStatus,
 } from "./contract.ts";
 
-const DEFAULT_MAX_CHARS = 50_000;
+// Claude Code caps a tool result at about 25,000 tokens, which dense text such
+// as logs can reach well before 50,000 characters.
+const DEFAULT_MAX_CHARS = 20_000;
 // Host limit: the extraction timeout plus time for a first-use download.
 const EXTRACT_CALL_TIMEOUT_MS = 15 * 60 * 1000;
 const INSTALL_CALL_TIMEOUT_MS = 10 * 60 * 1000;

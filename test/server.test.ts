@@ -92,7 +92,7 @@ test("the tool runs on the thread's machine, confined to workspace and storage",
     format: "markdown",
     ocr: "default",
     offset: 0,
-    maxChars: 50_000,
+    maxChars: 20_000,
   });
   assert.match(
     text(result),

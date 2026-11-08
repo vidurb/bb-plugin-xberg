@@ -40,10 +40,11 @@ the musl builds, which bundle their own loader and libraries.
 | `format`    | `markdown` | `markdown` or `plain`                                        |
 | `ocr`       | `default`  | `default`, `on` for scanned documents, `force` to always OCR |
 | `offset`    | `0`        | Character offset to read from                                |
-| `max_chars` | `50000`    | Most characters to return in one call, at most 200,000       |
+| `max_chars` | `20000`    | Most characters to return in one call, at most 200,000       |
 
 Longer documents are read a page at a time, and the result gives the next
-`offset`.
+`offset`. Some agents cap how much a tool can return: Claude Code allows about
+25,000 tokens, so keep `max_chars` near the default there.
 
 ## Limits and safety
 

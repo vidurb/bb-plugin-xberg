@@ -5,7 +5,7 @@ Agents get an `xberg_extract` tool, so you can point them at a document and ask 
 - **Office files and PDFs.** PDF, Word, Excel and PowerPoint come back as Markdown or plain text. Spreadsheets arrive as Markdown tables, with each sheet under its own heading.
 - **Text in images.** OCR reads text from images, and can be turned on for scanned documents. Check OCR output against the source when the numbers matter, because misreads come with no warning.
 - **Other formats.** Xberg lists about 100 document formats, including email, HTML and EPUB. Only the formats above have been tested with this plugin.
-- **Long documents.** Each call returns up to 50,000 characters by default, and tells the agent which offset to read next, so it can stop once it has what it needs.
+- **Long documents.** Each call returns up to 20,000 characters by default, and tells the agent which offset to read next, so it can stop once it has what it needs.
 
 ## How it works
 
