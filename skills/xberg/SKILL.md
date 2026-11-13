@@ -35,8 +35,8 @@ inside it unless the user asks you to.
 
 ## Installation
 
-The first extraction on a machine downloads the pinned Xberg release (about
-100 MB) to the plugin's data directory. To check or do this ahead of time, or
+The first extraction on a machine downloads the pinned Xberg release (a
+50–90 MB download) to the plugin's data directory. To check or do this ahead of time, or
 to delete the text Xberg has cached:
 
 ```sh

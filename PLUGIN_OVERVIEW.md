@@ -5,7 +5,7 @@ Agents get an `xberg_extract` tool, so you can point them at a document and ask 
 - **Office files and PDFs.** PDF, Word, Excel and PowerPoint come back as Markdown or plain text. Spreadsheets arrive as Markdown tables, with each sheet under its own heading.
 - **Text in images.** OCR reads text from images, and can be turned on for scanned documents. Check OCR output against the source when the numbers matter, because misreads come with no warning.
 - **Other formats.** Xberg's documentation lists about 100 document formats, including email, HTML and EPUB. Only the formats above have been tested with this plugin.
-- **Long documents.** Each call returns up to 20,000 characters by default, and tells the agent which offset to read next, so it can stop once it has what it needs.
+- **Long documents.** Each call returns up to 20,000 characters by default, and says how long the document is and which offset to read next. The agent decides how many pages to read.
 
 ## How it works
 
@@ -26,10 +26,12 @@ Each machine runs two extractions at a time, with a limit of 256 MiB per file an
 - Apple Silicon macOS, or Linux on x86-64 or arm64. Intel Macs and Windows aren't supported. The tool has been tested through BB on macOS. On Linux x86-64, Xberg has only been run directly, and Linux arm64 hasn't been tested.
 - Disk on each machine that runs extractions: about 120 MB for Xberg on macOS and 230 MB on Linux, plus its caches. Xberg 1.3.10's defaults keep extracted text for up to 30 days and 2 GB, and its OCR cache has no size limit. `bb xberg status` shows the size of the cached text, and `bb xberg cache clear` empties both caches. OCR language packs are downloaded the first time OCR runs and kept.
 - `tar` on the machine, to unpack the download.
-- Network access for the first download, and for the OCR language pack the first time OCR runs.
+- Network access for the first download, and the first time OCR runs, when Xberg fetches a language pack from the `tesseract-ocr/tessdata_fast` repository on GitHub. Xberg downloads that pack itself, from the repository's main branch, so the plugin doesn't pin or verify it.
 
 ## Security
 
-Xberg runs as your user and parses whatever documents you give it. The plugin passes it only `PATH`, `HOME`, `TMPDIR` and locale variables, and ignores Xberg config files in the workspace. It doesn't sandbox the process, so Xberg can still reach the network and read any file your user can.
+Xberg runs as your user and parses whatever documents you give it. The plugin passes it only `PATH`, `HOME`, `TMPDIR`, `LANG` and `LC_ALL`, plus its own cache directory, and turns off Xberg's config file discovery. It doesn't sandbox the process, so Xberg can still reach the network and read any file your user can.
 
 The cached text sits in readable form in the plugin's data directory on each machine.
+
+Extracted text is written by the document's author, so it can contain instructions aimed at the agent. The tool and its skill tell agents to treat it as data, not instructions, but treat documents from others with the same care as web pages.

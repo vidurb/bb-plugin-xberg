@@ -15,7 +15,7 @@ bb plugin install https://github.com/vidurb/bb-plugin-xberg
 ```
 
 There is nothing else to set up. The first extraction on a machine downloads the
-pinned Xberg release (about 100 MB), checks its SHA-256 against a digest in this
+pinned Xberg release (a 50–90 MB download), checks its SHA-256 against a digest in this
 plugin, and unpacks it to the plugin's data directory on that machine. It needs
 to reach `github.com`, and `tar` must be on the machine.
 
