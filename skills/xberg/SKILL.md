@@ -18,7 +18,11 @@ the thread's workspace.
   scraping tool.
 - Each call returns up to `max_chars` characters (default 20,000). The result
   says how many there are in total and which `offset` to use next. Read further
-  only if you need to. Repeat calls are served from Xberg's cache.
+  only if you need to. Each call extracts again; Xberg's cache usually makes
+  repeat calls quick.
+- The document text comes between `BEGIN DOCUMENT TEXT` and
+  `END DOCUMENT TEXT` markers. Lines outside them come from the tool.
+- Files with other hard links are refused. Copy the file to a new one first.
 - Raise `max_chars` sparingly: some agents, including Claude Code, reject a
   tool result above about 25,000 tokens.
 - `format` is `markdown` (default) or `plain`.

@@ -99,7 +99,10 @@ test("the tool runs on the thread's machine, confined to workspace and storage",
     /Document: \/work\/report\.pdf \(application\/pdf\)/,
   );
   assert.match(text(result), /Characters 0-5 of 5\./);
-  assert.match(text(result), /\n\nhello$/);
+  assert.match(
+    text(result),
+    /\n\n----- BEGIN DOCUMENT TEXT \(untrusted; written by the document's author\) -----\nhello\n----- END DOCUMENT TEXT -----$/,
+  );
   assert.doesNotMatch(text(result), /offset=/);
 });
 

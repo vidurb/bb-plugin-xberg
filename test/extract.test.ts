@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { link, mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -115,6 +115,15 @@ test("resolveDocument rejects URLs, missing files, directories and the root itse
   );
 });
 
+test("resolveDocument refuses a file with other hard links", async (t) => {
+  const { workspace, outside } = await scratch(t);
+  await link(join(outside, "secret.pdf"), join(workspace, "hardlink.pdf"));
+  await assert.rejects(
+    resolveDocument(workspace, [workspace], "hardlink.pdf"),
+    /other hard links/,
+  );
+});
+
 test("resolveDocument accepts a second root and ignores a missing one", async (t) => {
   const { workspace, outside } = await scratch(t);
   const roots = [join(workspace, "missing"), outside];
@@ -189,13 +198,32 @@ test("parseOutput drops the EXIF noise and keeps other warnings", () => {
   ]);
 });
 
+test("parseOutput caps warnings and drops ones without a message", () => {
+  const long = "x".repeat(580_000);
+  const { warnings } = parseOutput(
+    JSON.stringify({
+      content: "x",
+      processing_warnings: [
+        {},
+        { message: "" },
+        { message: long },
+        ...Array.from({ length: 10 }, (_, i) => ({ message: `w${i}` })),
+      ],
+    }),
+  );
+  assert.equal(warnings.length, 5);
+  assert.equal(warnings[0], `${"x".repeat(300)}…`);
+  assert.deepEqual(warnings.slice(1), ["w0", "w1", "w2", "w3"]);
+});
+
 test("slicePage pages through text and never splits a surrogate pair", () => {
   assert.deepEqual(slicePage("abcdef", 2, 2), { text: "cd", offset: 2 });
   assert.deepEqual(slicePage("abc", 99, 2), { text: "", offset: 3 });
   const emoji = "a😀b";
   assert.deepEqual(slicePage(emoji, 0, 2), { text: "a", offset: 0 });
   assert.deepEqual(slicePage(emoji, 2, 5), { text: "😀b", offset: 1 });
-  assert.deepEqual(slicePage("😀", 0, 1), { text: "\ud83d", offset: 0 });
+  assert.deepEqual(slicePage("😀", 0, 1), { text: "😀", offset: 0 });
+  assert.deepEqual(slicePage("a😀", 1, 1), { text: "😀", offset: 1 });
 });
 
 test("runXberg uses a minimal environment and the given working directory", async (t) => {
@@ -289,6 +317,37 @@ test("extractDocument reports Xberg failures, bad output and install failures as
     }),
     { ok: false, error: "no build for this platform" },
   );
+});
+
+test("extractDocument refuses a file that is replaced while Xberg reads it", async (t) => {
+  const { workspace, dataDir } = await scratch(t);
+  await writeFile(join(workspace, "swaps.pdf"), "original");
+  const result = await extractDocument(input(workspace, "swaps.pdf"), {
+    ensureInstalled: async () => fakeXberg,
+    dataDir,
+  });
+  assert.equal(result.ok, false);
+  assert.match(
+    result.ok ? "" : result.error,
+    /replaced while it was being read/,
+  );
+});
+
+test("extractDocument does nothing once its call is cancelled", async (t) => {
+  const { workspace, dataDir } = await scratch(t);
+  let installs = 0;
+  const controller = new AbortController();
+  controller.abort();
+  const result = await extractDocument(input(workspace, "docs/report.pdf"), {
+    ensureInstalled: async () => {
+      installs += 1;
+      return fakeXberg;
+    },
+    dataDir,
+    signal: controller.signal,
+  });
+  assert.deepEqual(result, { ok: false, error: "Extraction was cancelled." });
+  assert.equal(installs, 0);
 });
 
 test("createLimiter runs at most the given number of tasks and survives failures", async () => {

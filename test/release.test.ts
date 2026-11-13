@@ -35,13 +35,25 @@ async function setup(t: test.TestContext) {
   const body = await readFile(archivePath);
   let requests = 0;
   let status = 200;
+  let stall = false;
+  const stalled = new Set<import("node:http").ServerResponse>();
   const server = createServer((_request, response) => {
     requests += 1;
     response.statusCode = status;
+    if (stall) {
+      // Sends part of the archive, then nothing: a dropped connection.
+      response.setHeader("content-length", String(body.length));
+      response.write(body.subarray(0, 100));
+      stalled.add(response);
+      return;
+    }
     response.end(status === 200 ? body : "nope");
   });
   await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
-  t.after(() => new Promise((done) => server.close(done)));
+  t.after(() => {
+    for (const response of stalled) response.destroy();
+    return new Promise((done) => server.close(done));
+  });
   const { port } = server.address() as AddressInfo;
   const release = (sha256: string, version = "9.9.9") => ({
     version,
@@ -55,6 +67,9 @@ async function setup(t: test.TestContext) {
     requests: () => requests,
     setStatus: (next: number) => {
       status = next;
+    },
+    setStall: (next: boolean) => {
+      stall = next;
     },
   };
 }
@@ -142,6 +157,53 @@ test("an unsupported platform says so, including inherited object keys", async (
     assert.equal((await installer.status()).supported, false);
     await assert.rejects(installer.ensureInstalled(), /no supported build/);
   }
+});
+
+test("a stalled download is stopped and a later attempt can succeed", async (t) => {
+  const { dataDir, digest, release, setStall } = await setup(t);
+  setStall(true);
+  const installer = createInstaller({
+    dataDir,
+    release: release(digest),
+    platform: "test-os",
+    timeoutMs: 300,
+  });
+  await assert.rejects(
+    installer.ensureInstalled(),
+    /took longer than the limit/,
+  );
+  setStall(false);
+  await installer.ensureInstalled();
+  assert.equal((await installer.status()).installed, true);
+});
+
+test("an install directory that lost its binary is replaced", async (t) => {
+  const { dataDir, digest, release } = await setup(t);
+  await mkdir(join(dataDir, "releases", "9.9.9", "leftover"), {
+    recursive: true,
+  });
+  const installer = createInstaller({
+    dataDir,
+    release: release(digest),
+    platform: "test-os",
+  });
+  await installer.ensureInstalled();
+  assert.deepEqual(await readdir(join(dataDir, "releases", "9.9.9")), [
+    "xberg",
+  ]);
+});
+
+test("leftover staging directories from a killed install are removed", async (t) => {
+  const { dataDir, digest, release } = await setup(t);
+  await mkdir(join(dataDir, "releases", ".install-deadbeef"), {
+    recursive: true,
+  });
+  await createInstaller({
+    dataDir,
+    release: release(digest),
+    platform: "test-os",
+  }).ensureInstalled();
+  assert.deepEqual(await readdir(join(dataDir, "releases")), ["9.9.9"]);
 });
 
 test("installing a new version removes the old one", async (t) => {

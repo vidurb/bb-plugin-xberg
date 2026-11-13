@@ -50,13 +50,29 @@ Longer documents are read a page at a time, and the result gives the next
 
 - **Paths:** the real file, after following symlinks, must be inside the thread's
   workspace, its own thread storage, or the storage of the thread it was forked or
-  spawned from. Prompt attachments live in thread storage. URLs are refused.
+  spawned from. Prompt attachments live in thread storage. URLs are refused, and
+  so are files with other hard links. If the file is replaced while Xberg reads
+  it, the text isn't returned. This narrows what the tool reads, but it isn't a
+  security boundary: a process that can change the files can still race it.
+- **No workspace:** a thread without a workspace environment can't use the tool,
+  even for its own attachments.
 - **Config:** Xberg runs with `--no-config-discovery` in its own working
   directory, so an `xberg.toml` in a workspace has no effect.
-- **Environment:** Xberg gets only `PATH`, `HOME`, `TMPDIR` and locale variables,
-  not the daemon's environment.
-- **Resources:** two extractions at a time per machine, 256 MiB per file, and
-  10 minutes per extraction.
+- **Environment:** Xberg gets only `PATH`, `HOME`, `TMPDIR`, `LANG`, `LC_ALL` and
+  the `HTTP(S)_PROXY` and `NO_PROXY` variables, not the daemon's environment.
+- **Proxies:** Xberg can use a proxy to fetch OCR language packs, but the plugin's
+  own download of Xberg doesn't. On a network that needs a proxy, install Xberg
+  from a machine that doesn't, or copy the release into place by hand.
+- **Resources:** two extractions at a time per machine and 256 MiB per file. Xberg
+  is stopped after 10 minutes, when its call is cancelled, and when the plugin
+  reloads or its worker stops. The first download and unpacking are stopped after
+  5 minutes. Calls waiting for a free slot count against the server's 15-minute
+  limit.
+- **Pages:** each page runs the extraction again. Xberg's cache usually answers
+  repeat calls, but a cache miss, such as after `bb xberg cache clear`, repeats
+  the full extraction, and a file changed between calls can shift offsets.
+- **Output:** the document text is wrapped in begin and end markers, so the agent
+  can tell it from the plugin's own lines.
 - **Not a sandbox:** Xberg parses untrusted files as your user, and can make
   network requests, for example to fetch OCR models.
 - **Cache:** Xberg keeps extracted text readable in the plugin's data directory on

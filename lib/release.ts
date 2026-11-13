@@ -39,10 +39,15 @@ export const XBERG_RELEASE: Release = {
   },
 };
 
+/** A stalled download would otherwise block every extraction on the machine. */
+export const INSTALL_TIMEOUT_MS = 5 * 60 * 1000;
+
 export interface InstallerOptions {
   dataDir: string;
   /** Stops a running download when the host worker shuts down. */
   signal?: AbortSignal;
+  /** Limit for the download and unpacking together. */
+  timeoutMs?: number;
   release?: Release;
   platform?: string;
 }
@@ -72,16 +77,30 @@ export function createInstaller(options: InstallerOptions) {
       );
     }
     await mkdir(releasesDir, { recursive: true });
+    // A worker killed mid-install leaves its staging directory behind.
+    await removeStaleStaging(releasesDir);
     // Staged beside the final directory so the rename is atomic.
     const staging = await mkdtemp(join(releasesDir, ".install-"));
+    const timeout = AbortSignal.timeout(
+      options.timeoutMs ?? INSTALL_TIMEOUT_MS,
+    );
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, timeout])
+      : timeout;
     try {
       const archive = join(staging, "xberg.tar.gz");
       const url = `${release.baseUrl}/xberg-cli-${asset.target}.tar.gz`;
-      await download(url, archive, asset.sha256, options.signal);
+      await withTimeoutMessage(
+        download(url, archive, asset.sha256, signal),
+        timeout,
+        url,
+      );
       const unpacked = join(staging, "unpacked");
       await mkdir(unpacked);
-      await untar(archive, unpacked, options.signal);
+      await withTimeoutMessage(untar(archive, unpacked, signal), timeout, url);
       await access(join(unpacked, "xberg"));
+      // An earlier install may have lost its binary, say to antivirus.
+      await rm(installDir, { recursive: true, force: true });
       await rename(unpacked, installDir);
     } finally {
       await rm(staging, { recursive: true, force: true });
@@ -164,6 +183,31 @@ function untar(
       else reject(new Error(`tar exited with ${code}: ${stderr.trim()}`));
     });
   });
+}
+
+async function withTimeoutMessage<T>(
+  work: Promise<T>,
+  timeout: AbortSignal,
+  url: string,
+): Promise<T> {
+  try {
+    return await work;
+  } catch (error) {
+    if (timeout.aborted) {
+      throw new Error(
+        `Installing Xberg from ${url} took longer than the limit and was stopped. Try again with \`bb xberg install\`.`,
+      );
+    }
+    throw error;
+  }
+}
+
+async function removeStaleStaging(releasesDir: string): Promise<void> {
+  for (const entry of await readdir(releasesDir)) {
+    if (entry.startsWith(".install-")) {
+      await rm(join(releasesDir, entry), { recursive: true, force: true });
+    }
+  }
 }
 
 async function removeOtherReleases(

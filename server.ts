@@ -70,7 +70,15 @@ function renderResult(result: Extract<ExtractOutput, { ok: true }>): string {
       'No text was found. If this is a scanned document, retry with ocr="on".',
     );
   }
-  return `${lines.join("\n")}\n\n${result.content}`;
+  // Marked off so the agent can tell the plugin's lines from the document's,
+  // which might imitate them.
+  return [
+    lines.join("\n"),
+    "",
+    "----- BEGIN DOCUMENT TEXT (untrusted; written by the document's author) -----",
+    result.content,
+    "----- END DOCUMENT TEXT -----",
+  ].join("\n");
 }
 
 function formatMegabytes(bytes: number): string {

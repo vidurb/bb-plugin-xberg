@@ -8,6 +8,8 @@ import { workDirFor } from "./cache.ts";
 export const MAX_FILE_BYTES = 256 * 1024 * 1024;
 export const MAX_STDOUT_BYTES = 64 * 1024 * 1024;
 export const EXTRACT_TIMEOUT_MS = 10 * 60 * 1000;
+export const MAX_WARNINGS = 5;
+export const MAX_WARNING_CHARS = 300;
 
 /** A failure whose message is meant for the agent. */
 export class ExtractError extends Error {}
@@ -24,7 +26,10 @@ function isInside(root: string, target: string): boolean {
 
 /**
  * Resolves `path` through symlinks and returns it only if the real file is
- * under a real root, so a link in the workspace can't point the tool elsewhere.
+ * under a real root. Files with more than one hard link are refused, because a
+ * hard link can't be traced back to a location. This narrows what the tool
+ * reads; it is not a security boundary against a process that can change the
+ * files while Xberg reads them.
  */
 export async function resolveDocument(
   baseDir: string,
@@ -53,6 +58,11 @@ export async function resolveDocument(
   }
   const info = await stat(real);
   if (!info.isFile()) throw new ExtractError(`Not a file: ${candidate}`);
+  if (info.nlink > 1) {
+    throw new ExtractError(
+      `${candidate} has other hard links, so it might be a file from outside the allowed folders. Copy it to a new file first.`,
+    );
+  }
   if (info.size > MAX_FILE_BYTES) {
     throw new ExtractError(
       `${candidate} is ${info.size} bytes; the limit is ${MAX_FILE_BYTES}.`,
@@ -97,7 +107,20 @@ export function runXberg(options: RunOptions): Promise<string> {
     XBERG_CACHE_DIR: join(workDir, ".xberg"),
     NO_COLOR: "1",
   };
-  for (const name of ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL"]) {
+  // Proxy settings let Xberg fetch OCR language packs on networks that need one.
+  for (const name of [
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "NO_PROXY",
+    "no_proxy",
+  ]) {
     if (process.env[name] !== undefined) env[name] = process.env[name];
   }
   return new Promise((resolvePromise, reject) => {
@@ -183,10 +206,23 @@ export function parseOutput(stdout: string): ParsedDocument {
   if (typeof document.content !== "string") {
     throw new ExtractError("Xberg's output has no document content.");
   }
+  // Warnings sit outside the page limit and above the document text, so they
+  // are capped: a crafted document could otherwise fill them with its own text.
   const warnings = Array.isArray(document.processing_warnings)
     ? document.processing_warnings
-        .map((warning) => String(warning?.message))
-        .filter((message) => !IGNORED_WARNING.test(message))
+        .map((warning) => warning?.message)
+        .filter(
+          (message): message is string =>
+            typeof message === "string" &&
+            message.trim() !== "" &&
+            !IGNORED_WARNING.test(message),
+        )
+        .slice(0, MAX_WARNINGS)
+        .map((message) =>
+          message.length > MAX_WARNING_CHARS
+            ? `${message.slice(0, MAX_WARNING_CHARS)}…`
+            : message,
+        )
     : [];
   return {
     content: document.content,
@@ -206,12 +242,10 @@ export function slicePage(
   let start = Math.min(offset, content.length);
   if (start > 0 && isLowSurrogate(content.charCodeAt(start))) start -= 1;
   let end = Math.min(start + maxChars, content.length);
-  if (
-    end < content.length &&
-    end - start > 1 &&
-    isLowSurrogate(content.charCodeAt(end))
-  ) {
-    end -= 1;
+  if (end < content.length && isLowSurrogate(content.charCodeAt(end))) {
+    // Never split a pair; a one-character page takes the whole pair instead,
+    // so the next offset always moves forward.
+    end += end - start > 1 ? -1 : 1;
   }
   return { text: content.slice(start, end), offset: start };
 }
@@ -248,7 +282,11 @@ export async function extractDocument(
   dependencies: ExtractDependencies,
 ): Promise<ExtractOutput> {
   try {
+    if (dependencies.signal?.aborted) {
+      throw new ExtractError("Extraction was cancelled.");
+    }
     const file = await resolveDocument(input.baseDir, input.roots, input.path);
+    const before = await stat(file);
     const binary = await dependencies.ensureInstalled();
     const workDir = workDirFor(dependencies.dataDir);
     await mkdir(workDir, { recursive: true });
@@ -259,6 +297,12 @@ export async function extractDocument(
       signal: dependencies.signal,
       timeoutMs: dependencies.timeoutMs,
     });
+    const after = await stat(file).catch(() => null);
+    if (!after || after.dev !== before.dev || after.ino !== before.ino) {
+      throw new ExtractError(
+        `${file} was replaced while it was being read, so its text wasn't returned.`,
+      );
+    }
     const document = parseOutput(stdout);
     const page = slicePage(document.content, input.offset, input.maxChars);
     return {
@@ -268,7 +312,7 @@ export async function extractDocument(
       content: page.text,
       offset: page.offset,
       totalChars: document.content.length,
-      warnings: document.warnings.slice(0, 20),
+      warnings: document.warnings,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

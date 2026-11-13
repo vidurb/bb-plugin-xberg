@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Stands in for the real CLI. Behaviour depends on the document's name.
+import { renameSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 
 const args = process.argv.slice(2);
@@ -11,7 +12,12 @@ if (name === "fails.pdf") {
   process.exit(3);
 }
 if (name === "hangs.pdf") setInterval(() => {}, 1000);
-else if (name === "garbage.pdf") process.stdout.write("not json");
+else if (name === "swaps.pdf") {
+  // Replaces the document mid-read, as a racing process could.
+  writeFileSync(`${file}.new`, "other");
+  renameSync(`${file}.new`, file);
+  process.stdout.write(JSON.stringify({ result: { content: "swapped" } }));
+} else if (name === "garbage.pdf") process.stdout.write("not json");
 else {
   process.stdout.write(
     JSON.stringify({
